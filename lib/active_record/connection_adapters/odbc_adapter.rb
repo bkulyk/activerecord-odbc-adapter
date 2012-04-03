@@ -1790,7 +1790,7 @@ begin
           begin
             stmt = @connection.types
             puts "=========="
-            p stmd
+            p stmt
             puts "=========="
             @typeInfo = stmt.fetch_all
           rescue Exception => e
