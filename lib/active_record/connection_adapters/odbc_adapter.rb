@@ -1790,7 +1790,7 @@ begin
           begin
             stmt = @connection.types
             puts "=========="
-            p @connection
+            ap table_name
             ap stmt
             puts "=========="
             @typeInfo = stmt.fetch_all
