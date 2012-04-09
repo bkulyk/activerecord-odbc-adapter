@@ -1789,9 +1789,6 @@ begin
           
           begin
             stmt = @connection.types
-            puts "=========="
-            ap stmt
-            puts "=========="
             @typeInfo = stmt.fetch_all
           rescue Exception => e
             @logger.unknown("exception=#{e}") if @@trace
