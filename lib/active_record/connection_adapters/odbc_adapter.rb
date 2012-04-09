@@ -993,7 +993,7 @@ begin
           @logger.unknown("args=[#{table_name}|#{name}]") if @@trace
           
           table_name = table_name.to_s if table_name.class == Symbol
-          ap table_name
+
           getDbTypeInfo
           begin
             booleanColSurrogate = @emulate_booleans ? @@dbmsLookups.get_info(@dbmsName, @dbmsMajorVer, :boolean_col_surrogate) : nil
