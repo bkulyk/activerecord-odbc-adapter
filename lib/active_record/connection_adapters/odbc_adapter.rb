@@ -236,6 +236,18 @@ begin
       
       class ODBCAdapter < AbstractAdapter
         
+        def primary_key(table)
+          begin
+            stmt = @connection.primary_keys( table )
+            res = stmt.first
+            stmt.drop
+            pk = res[3]
+          rescue
+            pk = nil
+          end
+          pk
+        end
+        
         #-------------------------------------------------------------------
         # DbmsInfo holds DBMS-dependent information which cannot be derived 
         # satisfactorily through ODBC
@@ -530,6 +542,9 @@ begin
           rescue MissingSourceFile
             puts "ODBCAdapter#initialize> Couldn't find extension #{@odbcExtFile}.rb"        
           end
+          
+          #fixes the error --> ~/.rvm/gems/ruby-1.9.2-p318/gems/arel-3.0.2/lib/arel/tree_manager.rb:23:in `to_sql': undefined method `accept' for nil:NilClass (NoMethodError
+          @visitor = Arel::Visitors::ToSql.new self if defined?(Arel::Visitors::ToSql)
         end
         
         #--
@@ -764,11 +779,11 @@ begin
         
         # Returns an array of record hashes with the column names as keys and
         # column values as values.
-        def select_all(sql, name = nil)
+        def select_all(sql, name = nil, binds=[])
           @logger.unknown("ODBCAdapter#select_all>") if @@trace
           @logger.unknown("args=[#{sql}|#{name}]") if @@trace
           retVal = []
-          hResult = select(sql, name)
+          hResult = select(sql, name, binds)
           rRows = hResult[:rows]
           rColDescs = hResult[:column_descriptors]
           
@@ -1474,11 +1489,12 @@ begin
         # Executes a SELECT statement, returning a hash containing the 
         # result set rows (key :rows) and the result set column descriptors
         # (key :column_descriptors) as arrays.
-        def select(sql, name) # :nodoc:
+        def select(sql, name, binds) # :nodoc:
           scrollableCursor = false
           limit = 0
           offset = 0
-          qry = sql.dup
+          
+          qry = sql.to_sql.dup
           
           # Strip OFFSET and LIMIT from query if present, since ODBC doesn't
           # support them in a generic form.
@@ -1513,7 +1529,7 @@ begin
           
           # Execute the query
           begin
-            stmt = @connection.run(qry)
+            stmt = @connection.run(qry, *binds)
           rescue Exception => e
             stmt.drop unless stmt.nil?
             @logger.unknown("exception=#{e}") if @@trace && name != :force_error
@@ -1804,7 +1820,7 @@ begin
         def drop_sequence(name) end
         def next_sequence_value(name) end
         def ensure_sequences_table() end
-        
+          
       end # class ODBCAdapter
       
       #---------------------------------------------------------------------
