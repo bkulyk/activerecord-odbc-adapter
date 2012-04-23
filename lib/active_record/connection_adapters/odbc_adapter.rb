@@ -1870,12 +1870,12 @@ begin
         def initialize (name, tableName, default, odbcSqlType, nativeType, 
             null = true, limit = nil, scale = nil, dbExt = nil, 
             booleanColSurrogate = nil, nativeTypes = nil)          
-          # begin
+          begin
             require "#{dbExt}"
             self.extend ODBCColumnExt
-          # rescue MissingSourceFile
-            # # Assume the current DBMS doesn't require extensions to ODBCColumn
-          # end
+          rescue MissingSourceFile
+            # Assume the current DBMS doesn't require extensions to ODBCColumn
+          end
           
           @name, @null = name, null
           
