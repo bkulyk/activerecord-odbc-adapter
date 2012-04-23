@@ -5,6 +5,10 @@
 
 # Status
 
+**Apr-2012**
+
+Updates to support Rails 3.2.3 / Active Record 3.2.3
+
 **22-Nov-2008**
 
 Added new install information

@@ -170,5 +170,15 @@ module ODBCExt
     @logger.unknown("exception=#{e}") if @trace
     raise
   end
-          
+  
+  def get_auto_increment table_name
+    ai = nil
+    stmt = @connection.run "desc #{table_name}"
+    x = stmt.each_hash do |row|
+      ai = row['Field'] if row['Extra'] == 'auto_increment'
+    end
+    stmt.drop
+    ai
+  end
+  
 end

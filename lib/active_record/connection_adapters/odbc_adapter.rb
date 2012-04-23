@@ -779,7 +779,7 @@ begin
         
         # Returns an array of record hashes with the column names as keys and
         # column values as values.
-        def select_all(sql, name = nil, binds=[])
+        def select_all(sql, name = nil, binds)
           @logger.unknown("ODBCAdapter#select_all>") if @@trace
           @logger.unknown("args=[#{sql}|#{name}]") if @@trace
           retVal = []
@@ -804,13 +804,14 @@ begin
         
         # Returns a record hash with the column names as keys and column values
         # as values.
-        def select_one(sql, name = nil)
+        def select_one(sql, name = nil, binds)
           @logger.unknown("ODBCAdapter#select_one>") if @@trace
           @logger.unknown("args=[#{sql}|#{name}]") if @@trace
           retVal = nil
           scrollableCursor = false
           offset = 0
-          qry = sql.dup
+          
+          qry, binds = fix_params_and_bind sql, binds
           
           # Strip OFFSET and LIMIT from query if present, since ODBC doesn't
           # support them in a generic form.
@@ -845,7 +846,7 @@ begin
 =end        
           # Execute the query
           begin
-            stmt = @connection.run(qry)
+            stmt = @connection.run(qry, *binds)
           rescue Exception => e
             @logger.unknown("exception=#{e}") if @@trace
             stmt.drop unless stmt.nil?
@@ -900,11 +901,10 @@ begin
         end
         
         # Returns the ID of the last inserted row.
-        def insert(sql, name = nil, pk = nil, id_value = nil, 
-            sequence_name = nil)
+        def insert(sql, name = nil, pk = nil, id_value = nil, sequence_name = nil, binds)
           @logger.unknown("ODBCAdapter#insert>") if @@trace
           @logger.unknown("args=[#{sql}|#{name}|#{pk}|#{id_value}|#{sequence_name}]") if @@trace
-          insert_sql(sql, name, pk, id_value, sequence_name)
+          insert_sql(sql, name, pk, id_value, sequence_name, binds)
         end
         
         # Returns the default sequence name for a table.
@@ -1018,6 +1018,14 @@ begin
             @emulate_booleans = false
           end  
           cols = []
+          
+          # part of the hack below that should have worked
+          # stmt = @connection.run( "select * from #{table_name} where 0" )
+          # column_data = stmt.columns
+          # stmt.drop
+          
+          auto_increment = ( respond_to?( :get_auto_increment ) ?  get_auto_increment(table_name) : nil )
+          
           stmt = @connection.columns(dbmsIdentCase(table_name))
           resultSet = stmt.fetch_all || []
           resultSet.each do |col|
@@ -1040,6 +1048,13 @@ begin
             # MySQL native ODBC driver doesn't report nullability accurately.
             # So force nullability of 'id' columns
             colNullable = false if colName == 'id'
+            
+            colDefault = nil if auto_increment == colName
+            
+            # THIS SHOULD WORK, but autoincrement must be a private method... which is stupid
+            # if column_data.include? colName
+              # colDefault = nil if column_data[ colName ].autoincrement
+            # end
             
             # SQL Server ODBC drivers may wrap default value in parentheses
             if colDefault =~ /^\('(.*)'\)$/ # SQL Server character default
@@ -1304,10 +1319,11 @@ begin
         # Returns a single value from a record
         #--
         # No need to implement beyond a tracing wrapper
-        def select_value(sql, name = nil)
+        def select_value(sql, name = nil, binds=[])
           @logger.unknown("ODBCAdapter#select_value>") if @@trace
           @logger.unknown("args=[#{sql}|#{name}]") if @@trace
-          super(sql, name)
+          # super(sql, name)
+          x = select_one( sql, name, binds ).values.first
         rescue Exception => e
           @logger.unknown("exception=#{e}") if @@trace
           raise StatementInvalid, e.message
@@ -1359,16 +1375,41 @@ begin
           raise ActiveRecordError, e.message
         end
         
+        def fix_params_and_bind( sql, binds )
+          begin
+            sql = sql.dup.to_sql
+          rescue
+            # don't change sql
+          end
+          
+          binds = binds.map { |p|
+            binds.first.class.name == "Array" ? p.second : p
+          }
+          
+          return [ sql, binds ]
+        end
+        
         # Returns the last auto-generated ID from the affected table.
-        def insert_sql(sql, name = nil, pk = nil, id_value = nil, sequence_name = nil) # :nodoc:  
+        def insert_sql(sql, name = nil, pk = nil, id_value = nil, sequence_name = nil, binds) # :nodoc:  
           # id_value ::= pre-assigned id
           retry_count = 0
+          
+          sql, binds = fix_params_and_bind sql, binds
+          table = sql.split(" ", 4)[2]
+          
           begin
             pre_insert(sql, name, pk, id_value, sequence_name) if respond_to?("pre_insert")
-            stmt = @connection.run(sql)
-            table = sql.split(" ", 4)[2]
-            res = id_value || last_insert_id(table, sequence_name || 
-                default_sequence_name(table, pk), stmt)
+            stmt = @connection.run( sql, *binds )
+            
+            # res = id_value || last_insert_id(table, sequence_name || default_sequence_name(table, pk), stmt)
+            res = id_value
+            if res.blank? || res === 0
+              res = last_insert_id(table, sequence_name || default_sequence_name(table, pk), stmt)
+            end
+            
+            # TODO It does not feel like, I should have to do this, but stuff is not working right...
+            col = getODBCColumnDesc table.gsub( '`', '' ), pk
+            res = col.type_cast res
           rescue Exception => e
             @logger.unknown("exception=#{e}") if @@trace
             if @dbmsName == :virtuoso  && id_value.nil? && e.message =~ /sr197/i
@@ -1395,7 +1436,6 @@ begin
             post_insert(sql, name, pk, id_value, sequence_name) if respond_to?("post_insert")
             stmt.drop unless stmt.nil?
           end
-          res
         end
 
         #--
@@ -1494,7 +1534,7 @@ begin
           limit = 0
           offset = 0
           
-          qry = sql.to_sql.dup
+          qry, binds = fix_params_and_bind sql, binds
           
           # Strip OFFSET and LIMIT from query if present, since ODBC doesn't
           # support them in a generic form.
@@ -1526,7 +1566,7 @@ begin
           end
         end
 =end
-          
+
           # Execute the query
           begin
             stmt = @connection.run(qry, *binds)
@@ -1830,12 +1870,12 @@ begin
         def initialize (name, tableName, default, odbcSqlType, nativeType, 
             null = true, limit = nil, scale = nil, dbExt = nil, 
             booleanColSurrogate = nil, nativeTypes = nil)          
-          begin
+          # begin
             require "#{dbExt}"
             self.extend ODBCColumnExt
-          rescue MissingSourceFile
-            # Assume the current DBMS doesn't require extensions to ODBCColumn
-          end
+          # rescue MissingSourceFile
+            # # Assume the current DBMS doesn't require extensions to ODBCColumn
+          # end
           
           @name, @null = name, null
           
