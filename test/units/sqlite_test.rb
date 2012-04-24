@@ -115,13 +115,30 @@ class SqliteTest < MiniTest::Unit::TestCase
   
   def test_create doassert=true
     m = Movie.create title: 'Highlander', year: '1986'
-    assert 1, m.id #if doassert
+    assert 1, m.id if doassert
     
     m = Movie.create title: 'Highlander II: The Quickening', year: 1991
-    assert_equal 2, m.id #if doassert
+    assert_equal 2, m.id if doassert
 
     Movie.create title: 'Predator 2', year: 1990
     Movie.create title: 'Teenage Mutant Ninja Turtles', year: 1990
+  end
+  
+  def test_select_all
+    test_create false
+    
+    x = ActiveRecord::Base.connection.select_all( 'SELECT * FROM movies', [] )
+    res = x.map { |m| m['title'] }
+    
+    assert_equal 4, res.size
+    assert res.include? 'Predator 2' #for example
+  end
+  
+  def test_select_one
+    test_create false
+    
+    res = ActiveRecord::Base.connection.select_one( 'SELECT * FROM movies where id = ?', [4] )
+    assert_equal 'Teenage Mutant Ninja Turtles', res['title']
   end
   
   # def test_find
