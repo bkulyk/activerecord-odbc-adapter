@@ -16,16 +16,33 @@ ActiveRecord::Base.establish_connection(
     username: 'root',
     password: 'pass'
   )
-  
+
 class Movie < ActiveRecord::Base
+  has_many :movie_actors
+  has_many :actors, :through=>:movie_actors
+  
+  scope :within_years, lambda { |start, stop|
+    return where( 'year >= ?', start ).where( 'year <= ?', stop )
+  }
 end
 
-class SqliteTest < MiniTest::Unit::TestCase
+class MovieActor < ActiveRecord::Base
+  belongs_to :movie
+  belongs_to :actor
+end
+
+class Actor < ActiveRecord::Base
+  has_many :movie_actors
+  has_many :movies, :through=>:movie_actors
+end
+
+class MysqlTest < MiniTest::Unit::TestCase
   
   def setup
     begin
       ActiveRecord::Base.connection.execute "DROP TABLE movies"
       ActiveRecord::Base.connection.execute "DROP TABLE actors"
+      ActiveRecord::Base.connection.execute "DROP TABLE movie_actors"
     rescue
       #do nothing
     end
@@ -44,6 +61,37 @@ class SqliteTest < MiniTest::Unit::TestCase
     `lastname` varchar(255) NOT NULL,
     PRIMARY KEY (`id`) )"
     r = ActiveRecord::Base.connection.execute sql
+    
+    sql = "CREATE TABLE IF NOT EXISTS `movie_actors` (
+    `id` int(10) NOT NULL AUTO_INCREMENT,
+    `movie_id` int(10) NOT NULL,
+    `actor_id` int(10) NOT NULL,
+    PRIMARY KEY (`id`) )"
+    r = ActiveRecord::Base.connection.execute sql
+  end
+  
+  def create_actors
+    test_create false
+    
+    m = Movie.find_by_title 'Highlander'
+    a = Actor.create firstname: 'Christopher', lastname: 'Lambert'
+    
+    m.actors << a
+    m.save
+    
+    m = Movie.find 2
+    m.actors << a
+  end
+  
+  def test_relations
+    create_actors
+    
+    m = Movie.find_by_title 'Highlander'
+    
+    assert_equal 1, m.actors.size
+    
+    a = Actor.find_by_lastname 'Lambert'
+    assert_equal 2, a.movies.size
   end
   
   def test_primary_key
@@ -124,6 +172,26 @@ class SqliteTest < MiniTest::Unit::TestCase
     Movie.create title: 'Teenage Mutant Ninja Turtles', year: 1990
   end
   
+  def test_scope
+    test_create false
+
+    movies = Movie.within_years 1990, 1991
+    assert_equal 3, movies.size
+    
+    titles = movies.map { |m| m.title }
+    assert titles.include? 'Predator 2'
+    assert titles.include? 'Teenage Mutant Ninja Turtles'
+    assert titles.include? 'Highlander II: The Quickening'
+    refute titles.include? 'Highlander'
+    
+    # try again with a different date range
+    movies = Movie.within_years 1900, 1989
+    assert_equal 1, movies.size
+    
+    titles = movies.map { |m| m.title }
+    assert titles.include? 'Highlander'
+  end
+  
   def test_select_all
     test_create false
     
@@ -141,34 +209,34 @@ class SqliteTest < MiniTest::Unit::TestCase
     assert_equal 'Teenage Mutant Ninja Turtles', res['title']
   end
   
-  # def test_find
-    # test_create false
-#     
-    # a = Movie.find 2
-    # assert_equal 1991, a.year
-#     
-    # b = Movie.find 1
-    # assert_equal 'Highlander', b.title
-  # end
-#   
-  # def test_find_by_match
-    # test_create false
-#     
-    # t = 'Teenage Mutant Ninja Turtles'
-    # a = Movie.find_by_title t
-    # assert_equal 1990, a.year
-    # assert_equal t, a.title
-  # end
-#   
-  # def test_find_all_by_match
-    # test_create false
-#     
-    # all = Movie.find_all_by_year 1990
-    # assert_equal 2, all.size
-#     
-    # titles = all.map { |x| x.title }
-    # assert titles.include? 'Teenage Mutant Ninja Turtles'
-    # assert titles.include? 'Predator 2'
-  # end
-#   
+  def test_find
+    test_create false
+    
+    a = Movie.find 2
+    assert_equal 1991, a.year
+    
+    b = Movie.find 1
+    assert_equal 'Highlander', b.title
+  end
+  
+  def test_find_by_match
+    test_create false
+    
+    t = 'Teenage Mutant Ninja Turtles'
+    a = Movie.find_by_title t
+    assert_equal 1990, a.year
+    assert_equal t, a.title
+  end
+  
+  def test_find_all_by_match
+    test_create false
+    
+    all = Movie.find_all_by_year 1990
+    assert_equal 2, all.size
+    
+    titles = all.map { |x| x.title }
+    assert titles.include? 'Teenage Mutant Ninja Turtles'
+    assert titles.include? 'Predator 2'
+  end
+  
 end
