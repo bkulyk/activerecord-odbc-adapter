@@ -517,6 +517,7 @@ begin
           
           # Caches SQLGetInfo output
           @dsInfo = DSInfo.new(connection)
+          
           # Caches SQLGetTypeInfo output
           @typeInfo = nil 
           # Caches mapping of Rails abstract data types to DBMS native types.
@@ -1019,16 +1020,15 @@ begin
           end  
           cols = []
           
-          # part of the hack below that should have worked
-          # stmt = @connection.run( "select * from #{table_name} where 0" )
-          # column_data = stmt.columns
-          # stmt.drop
+          clean_table_name = dbmsIdentCase(table_name)
           
-          auto_increment = ( respond_to?( :get_auto_increment ) ?  get_auto_increment(table_name) : nil )
+          auto_increment = nil
+          auto_increment = ( respond_to?( :get_auto_increment ) ?  get_auto_increment( clean_table_name ) : nil )
           
-          stmt = @connection.columns(dbmsIdentCase(table_name))
+          stmt = @connection.columns( clean_table_name )
           resultSet = stmt.fetch_all || []
           resultSet.each do |col|
+              
             colName = col[3] # SQLColumns: COLUMN_NAME
             colDefault = col[12] # SQLColumns: COLUMN_DEF
             colSqlType = col[4] # SQLColumns: DATA_TYPE
@@ -1375,6 +1375,8 @@ begin
           raise ActiveRecordError, e.message
         end
         
+        # this is a helper method to run the to_sql method on the sql if it's an AREL or not if it's a string
+        # this method also grabs the values from the binds as appropriate (active record turns them into columns)
         def fix_params_and_bind( sql, binds )
           begin
             sql = sql.dup.to_sql
@@ -1387,6 +1389,19 @@ begin
           }
           
           return [ sql, binds ]
+        end
+        
+        def get_column_from_cache table_name, column_name
+          col = nil
+          # ap self.schema_cache.columns
+          self.schema_cache.columns[ table_name ].each do |column|
+            # ap column
+            if column_name == column.name
+              col = column
+              break
+            end
+          end
+          col
         end
         
         # Returns the last auto-generated ID from the affected table.
@@ -1406,9 +1421,10 @@ begin
             if res.blank? || res === 0
               res = last_insert_id(table, sequence_name || default_sequence_name(table, pk), stmt)
             end
-            
             # TODO It does not feel like, I should have to do this, but stuff is not working right...
-            col = getODBCColumnDesc table.gsub( '`', '' ), pk
+            # ap columns( table.gsub( '`', '' ) ).find { |c| c.name == pk }
+            # ap self.schema_cache.columns.find_index { |c| c.name == pk }
+            col = get_column_from_cache table.gsub( '`', '' ), pk
             res = col.type_cast res
           rescue Exception => e
             @logger.unknown("exception=#{e}") if @@trace

@@ -70,6 +70,16 @@ class MysqlTest < MiniTest::Unit::TestCase
     r = ActiveRecord::Base.connection.execute sql
   end
   
+  def test_assignment
+    m = Movie.new
+    
+    assert_equal( {'id'=>nil, 'title'=>'', 'year'=>0}, m.class.column_defaults )
+    
+    assert_equal( ['id', 'title', 'year'], m.attributes.keys )
+    assert m.respond_to? 'title='
+    assert m.respond_to? 'title'
+  end
+  
   def create_actors
     test_create false
     

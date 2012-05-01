@@ -84,4 +84,28 @@ module ODBCExt
     super(table_name, name).delete_if { |i| i.unique && i.name =~ /^sql\d+$/ }
   end
   
+  def get_auto_increment( table_name )
+    # this is a pretty poor way of doing this, and it's very slow (for some reason, unknown to me) I have not yet found a better way
+
+    return 'id'.upcase
+
+    # sql = "SELECT DISTINCT C.TABLE_SCHEMA, C.TABLE_NAME, C.COLUMN_NAME, C.IDENTITY FROM QSYS2.SYSCOLUMNS C 
+          # WHERE UPPER(C.TABLE_NAME) = UPPER(?) AND UPPER(C.TABLE_SCHEMA) = UPPER(?) AND UPPER(C.IDENTITY) = 'YES'"
+#     
+    # stmt = @connection.prepare sql
+    # stmt.execute table_name, self.pool.spec.config[:schema]
+#     
+    # column = nil
+# 
+    # x = stmt.fetch_hash
+    # begin
+      # column = x['COLUMN_NAME']
+    # rescue
+      # columm = nil
+    # end
+# 
+    # stmt.drop
+    # column
+  end
+  
 end # module

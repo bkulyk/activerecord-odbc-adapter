@@ -1,2 +1,0 @@
-module ODBCColumnExt
-end # module
